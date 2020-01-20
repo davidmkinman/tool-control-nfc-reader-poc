@@ -5,13 +5,11 @@
 #include "config.h"
 
 
-StaticJsonDocument<LOCAL_SETTING_BUFFER_SIZE> localSettings;
-StaticJsonDocument<SHADOW_BUFFER> shadowSettings;
-StaticJsonDocument<TOKEN_DOC_SIZE> tokens;
-StaticJsonDocument<CONFIG_DOC_SIZE> config;
-bool hasConfigChanged = false;
-bool hasTokensChanged = false;
-
+extern StaticJsonDocument<LOCAL_SETTING_BUFFER_SIZE> localSettings;
+extern StaticJsonDocument<TOKEN_DOC_SIZE> tokens;
+extern StaticJsonDocument<CONFIG_DOC_SIZE> config;
+extern bool hasConfigChanged;
+extern bool hasTokensChanged;
 
 // Open file and return contents as a string object
 String openFile( String filename) {

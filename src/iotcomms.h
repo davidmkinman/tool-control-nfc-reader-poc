@@ -1,16 +1,18 @@
 
 
 
-void setupWifi(void);  // setup and configure wifi network using local settings
-void setupAws(void);   // setup aws iot connectivity
-void loadTokens(void); // loadup tokens
-void writeTokensToFlash(void);
-void loadConfig(void); // load config
+
+void setupWifi(void);  
+void setupAws(void);
+void callBackHandler(char *, int , char *);
+void loadConfig(void);
+void requestConfigUpdate(void);
 void writeConfigToFlash(void);
-void requestTokenUpdate(void); // request token list from cloud
-void requestConfigUpdate(void); // request config from cloud
-void shadowUpdateCallBackHandler (char, int, char );
-void updateShadowValues(char*);
+void loadTokens(void);
+void requestTokenUpdate(void);
+void writeTokensToFlash(void);
+void iotcommLoop(void);
+void iotcommSetup(void);
 
 
 // WiFi and MQTT configuration 

@@ -8,49 +8,45 @@
 #include "tools.h"
 #include <FS.h>
 #include <SPIFFS.h>
-
+#include <ota.h>
 
 
 WiFiMulti wifiMulti;
 AWS_IOT awsIot;
+#define FIRMWARE_URL "https://dl.bintray.com/inmandmk/esp32/slms-tool-control-nfc-unit/firmware_v_1.bin"
+
 
 int status = WL_IDLE_STATUS;
+bool startUp;
 
-
-extern StaticJsonDocument<LOCAL_SETTING_BUFFER_SIZE> localSettings;
-extern StaticJsonDocument<SHADOW_BUFFER> shadowSettings;
-extern StaticJsonDocument<TOKEN_DOC_SIZE> tokens;
-extern StaticJsonDocument<CONFIG_DOC_SIZE> config;
-extern bool hasConfigChanged;
-extern bool hasTokensChanged;
+StaticJsonDocument<LOCAL_SETTING_BUFFER_SIZE> localSettings;
+StaticJsonDocument<TOKEN_DOC_SIZE> tokens;
+StaticJsonDocument<CONFIG_DOC_SIZE> config;
+bool hasConfigChanged;
+bool hasTokensChanged;
+char deviceId[DEVICE_ID_LENGTH];
+char deviceName[21];
+extern int timeout;
 
 extern int tick,msgCount,msgReceived;
 extern int totalMsg;
 extern char payload[16192];
 extern char rcvdPayload[16192];
 extern char msgTopic[128];
-extern char deviceId[DEVICE_ID_LENGTH];
-extern char deviceName[21];
+
 
 char baseSubTopic[128];
 String baseTopic;
-// char topicGettokens[128];
-// char topicReceiveConfig[128];
-// char topicGetConfig[128];
-// //char topicGetShadow[128];
-// char topicReceiveShadowGet[128];
-// char topicReceiveShadowUpdate[128];
-// //char topicUpdateShadow[128];
 
 void setupWifi() {
     // extract list of wifi networks to connect too
     JsonArray wifiConfig = localSettings["wifi"].as<JsonArray>();
     for (int i=0; i<wifiConfig.size(); i++) {
         const char *wifiSsid = wifiConfig[i]["wifiSsid"];
-        const char ****REMOVED*** = wifiConfig[i]["***REMOVED***"];
+        const char *wifiPassword = wifiConfig[i]["wifiPassword"];
         Serial.print("Added Ssid: ");
         Serial.println(wifiSsid);
-        wifiMulti.addAP(wifiSsid, ***REMOVED***);
+        wifiMulti.addAP(wifiSsid, wifiPassword);
     }
 
     Serial.println("Connecting Wifi...");
@@ -64,24 +60,72 @@ void setupWifi() {
     }
 }
 
+
+void setupAws() {
+
+  if (awsIot.connect( localSettings["mqttAddress"],
+                      deviceId,
+                      openFile(CA_FILENAME).c_str(),
+                      openFile(CLIENT_CERT_FILENAME).c_str(),
+                      openFile(CLIENT_KEY_FILENAME).c_str() ) == 0) {
+    Serial.println("Connected to AWS");
+    delay(2000);
+    
+    baseTopic = "devices/";
+    baseTopic += deviceId;
+    baseTopic +=  "/#";
+    if ( 0 == awsIot.subscribe(baseTopic.c_str(),callBackHandler) ) {
+      Serial.printf("Subscribe |%s| Successfull\n", baseSubTopic);
+    } else {
+      Serial.printf("Subscribe |%s| failed\n", baseSubTopic);
+      Serial.println("Subscribe Failed, Check the Thing Name and Certificates");
+    }
+
+  } else {
+    Serial.println("AWS connection failed, Check the HOST Address");
+    delay(1000);
+    while(1);
+  }
+  delay(1000);
+}
+
 void callBackHandler(char *topicName, int payloadLen, char *payLoad) {
   // the topicname contains topicname plus the payload!
   char topic[128], curTopic[128];
   int curTopicLen;
 
+  // handle the firemware update queue ota
+  curTopicLen = sprintf(curTopic,"%s/%s/%s","devices",deviceId,"ota");
+  strncpy(topic, topicName, curTopicLen);
+  if (strcmp(topic, curTopic) == 0 ) {
+    Serial.println("received OTA command");
+    deserializeJson(config, payLoad, payloadLen);
+    // String binMD5;
+    String binURL = String( "http://dl.bintray.com/inmandmk/esp32/slms-tool-control-nfc-unit/firmware_v_1.bin");
+    Serial.println("received OTA command");
+    firmwareUpdate(binURL, 443);
+
+  }
+
+  // handle authorisation tokens queue
   curTopicLen = sprintf(curTopic,"%s/%s/%s","devices",deviceId,"tokens");
   strncpy(topic, topicName, curTopicLen);
   if (strcmp(topic, curTopic) == 0 ) {
     deserializeJson(tokens, payLoad, payloadLen);
     hasTokensChanged = true;
   }
+  // handle device config queue
   curTopicLen = sprintf(curTopic,"%s/%s/%s","devices",deviceId,"config");
   strncpy(topic, topicName, curTopicLen);
   if (strcmp(topic, curTopic) == 0 ) {
+    Serial.println("received config command");
     deserializeJson(config, payLoad, payloadLen);
     hasConfigChanged = true;
     strncpy(deviceName, (const char *)config["name"],20); 
   }
+
+
+
 }
 
 void loadConfig() {
@@ -92,13 +136,14 @@ void loadConfig() {
     Serial.println("- failed to open file for reading");
     requestConfigUpdate();
     return;
-  }
+  } 
   auto error = deserializeJson(config, filePtr);
   if (error) {
     Serial.print(F("deserializeJson() of config  failed with code \n"));
     Serial.println(error.c_str());
     return;
   }
+  strncpy(deviceName, (const char *)config["name"],20); 
   filePtr.close();
 }
 
@@ -112,7 +157,6 @@ void requestConfigUpdate() {
     Serial.printf("Publish to %s failed\n", ttopic);
   } 
 }
-
 
 void writeConfigToFlash() {
   hasConfigChanged = false;
@@ -129,9 +173,7 @@ void writeConfigToFlash() {
   }
   filePtr.close();
 
-  //Serial.println( (const char*) tokens["thingtype"]);
 }
-
 
 void loadTokens() {
   Serial.printf("Opening file: %s\r\n", TOKEN_LIST);
@@ -163,7 +205,6 @@ void requestTokenUpdate() {
   } 
 }
 
-
 void writeTokensToFlash() {
   hasTokensChanged = false;
   //SPIFFS.remove(TOKEN_LIST);
@@ -181,85 +222,47 @@ void writeTokensToFlash() {
   Serial.println( (const char*) tokens["thingtype"]);
 }
 
-void shadowStateCallBackHandler (char *topicName, int payloadLen, char *payLoad)
-{
-  strncpy(rcvdPayload,payLoad,payloadLen);
-  strcpy(msgTopic,topicName);
-
-  rcvdPayload[payloadLen] = 0;
-  msgReceived = 1;
-}
-
-void mySubCallBackHandler (char *topicName, int payloadLen, char *payLoad)
-{
-  strncpy(rcvdPayload,payLoad,payloadLen);
-  rcvdPayload[payloadLen] = 0;
-  msgReceived = 1;
-}
 
 
-void setupAws() {
+TaskHandle_t iotcommLoopHandle = NULL;
 
-  if (awsIot.connect( localSettings["mqttAddress"],
-                      deviceId,
-                      openFile(CA_FILENAME).c_str(),
-                      openFile(CLIENT_CERT_FILENAME).c_str(),
-                      openFile(CLIENT_KEY_FILENAME).c_str() ) == 0) {
-    Serial.println("Connected to AWS");
-    delay(2000);
-
-    // sprintf(topicReceiveShadowGet, "%s/%s/%s", "$aws/things", deviceId, "shadow/get/accepted");
-    // if ( 0 == awsIot.subscribe(topicReceiveShadowGet, shadowStateCallBackHandler) ) {
-    //   Serial.printf("Subscribe |%s| Successfull\n", topicReceiveShadowGet);
-    // } else {
-    //   Serial.printf("Subscribe |%s| failed\n", topicReceiveShadowGet);
-    //   Serial.println("Subscribe Failed, Check the Thing Name and Certificates");
-    // }
-
-    // sprintf(topicReceiveShadowUpdate, "%s/%s/%s", "$aws/things", deviceId, "shadow/update/accepted");
-    // if ( 0 == awsIot.subscribe(topicReceiveShadowUpdate,shadowStateCallBackHandler) ) {
-    //   Serial.printf("Subscribe |%s| Successfull\n", topicReceiveShadowUpdate);
-    // } else {
-    //   Serial.printf("Subscribe |%s| failed\n", topicReceiveShadowUpdate);
-    //   Serial.println("Subscribe Failed, Check the Thing Name and Certificates");
-    // }
-
-
-        //snprintf(topicReceiveTokens, 128, "devices/%s/tokens", deviceId);
- 
-    
-    baseTopic = "devices/";
-    baseTopic += deviceId;
-    baseTopic +=  "/#";
-    if ( 0 == awsIot.subscribe(baseTopic.c_str(),callBackHandler) ) {
-      Serial.printf("Subscribe |%s| Successfull\n", baseSubTopic);
-    } else {
-      Serial.printf("Subscribe |%s| failed\n", baseSubTopic);
-      Serial.println("Subscribe Failed, Check the Thing Name and Certificates");
+void iotcommLoop(void * pvParameters) {
+  for (;;){
+    if (wifiMulti.run() != WL_CONNECTED) {
+      Serial.println("Wifi not connected, connecting");
+      setupWifi();
+      setupAws();
+      delay(500);
+      if ( startUp == true) {
+        startUp = false;
+        Serial.println("download config");
+        loadConfig();
+        loadTokens();
+      }
     }
-
-  } else {
-    Serial.println("AWS connection failed, Check the HOST Address");
     delay(1000);
-    while(1);
+    if ( hasConfigChanged ) { Serial.println("lets write config.json"); writeConfigToFlash(); }
+    if ( hasTokensChanged ) { Serial.println("lets write tokens.json"); writeTokensToFlash(); }
+
   }
-  delay(1000);
 }
 
-void updateShadowValues(char *shadow) {
-
-    // Serial.printf("Opening file: %s\r\n", LOCAL_SETTINGS_FILENAME);
-
-    // File file = SPIFFS.open(LOCAL_SETTINGS_FILENAME);
-    // if(!file || file.isDirectory()){
-    //     Serial.println("- failed to open file for reading");
-    //     return ;
-    // }
-  auto error = deserializeJson(shadowSettings, shadow);
-  if (error) {
-      Serial.print(F("deserializeJson() failed with code "));
-      Serial.println(error.c_str());
-      return;
-  }
-   // file.close();
+void iotcommSetup() {
+  hasConfigChanged = false;
+  hasTokensChanged = false;
+  snprintf(deviceId, DEVICE_ID_LENGTH, "ESP32-%04X%08X", (uint16_t)(ESP.getEfuseMac() >> 32), (uint32_t)ESP.getEfuseMac());
+  loadConfig();
+  loadTokens();
+  xTaskCreatePinnedToCore(
+    iotcommLoop,          /* Task function. */
+    "iotcommLoop",        /* String with name of task. */
+    5000,                 /* Stack size in bytes. */
+    NULL,                 /* Parameter passed as input of the task */
+    1,                    /* Priority of the task. */
+    &iotcommLoopHandle,   /* Task handle. */
+    1
+  );                   /* Which ESP32 core */
+  startUp = true;
 }
+
+

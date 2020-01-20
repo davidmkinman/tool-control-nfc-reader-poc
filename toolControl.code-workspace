@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"terminal.integrated.env.osx": {
+			"PATH": "/Users/inmandmk/.platformio/penv/bin:/Users/inmandmk/.platformio/penv:/Users/inmandmk/.sdkman/candidates/visualvm/current/bin:/Users/inmandmk/.sdkman/candidates/java/current/bin:/Users/inmandmk/.sdkman/candidates/groovy/current/bin:/Users/inmandmk/.pyenv/shims:/Users/inmandmk/.rbenv/shims:/Users/inmandmk/.rbenv/shims:/usr/local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/MacGPG2/bin:/opt/X11/bin:/Applications/Wireshark.app/Contents/MacOS:/Applications/Postgres.app/Contents/Versions/latest/bin:/Users/inmandmk/projects/aws/api/bin:/Users/inmandmk/projects/aws/ami/bin:/Users/inmandmk/.fabric8/bin:/Users/inmandmk/esp/xtensa-esp32-elf/bin",
+			"PLATFORMIO_CALLER": "vscode"
+		}
+	}
+}

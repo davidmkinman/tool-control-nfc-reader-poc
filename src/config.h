@@ -26,7 +26,10 @@
 const int LCD_COLS = 20;
 const int LCD_ROWS = 4;
 
-#define DOOR_1_PIN       26  //d26
+#define TOOL_OFF 1
+#define TOOL_ON  0
+#define TOOL_1_PIN       26  //d26
+#define TOOL_2_PIN       25  //d25
 #define OPEN_INTERVAL   12000
 #define RF_OFF_INTERVAL  1000
 
@@ -41,41 +44,7 @@ const int LCD_ROWS = 4;
   
 #define I2C_SCL_PIN       22  //d22
 #define I2C_SDA_PIN       21  //d21
-#define EEPROM_SIZE  1984
 
-struct kUser
-{
-    // Constructor
-    kUser()
-    {
-        memset(this, 0, sizeof(kUser));
-    }
-
-    // Card ID (4 or 7 bytes), binary
-    union 
-    {
-        uint64_t  u64;      
-        byte      u8[8];
-    } ID;
-   
-
-    // This byte stores eUserFlags (which door(s) to open for this user)
-    byte u8_Flags;    
-};
-
-enum eUserFlags
-{
-    DOOR_ONE  = 1,
-    ADMIN  = 2,
-    SUPER = DOOR_ONE | ADMIN,
-};
-
-struct kCard
-{
-    byte     u8_UidLength;   // UID = 4 or 7 bytes
-    byte     u8_KeyVersion;  // for Desfire random ID cards
-    bool      b_PN532_Error; // true -> the error comes from the PN532, false -> crypto error
-};
 
 enum cmdMode {
     TOOL_CONTROL = 1,   // dfault mode, controling tool power
@@ -83,11 +52,6 @@ enum cmdMode {
     ADD_ADMIN    = 3    // An Admin is adding new inductors
 };
 
-enum toolStates {
-    TOOL_ON       = 1,   // device powered up
-    TOOL_OFF      = 2,   // device powered off
-    TOOL_DISABLED = 3    // device disabled by its admins
-};
 
 
 
